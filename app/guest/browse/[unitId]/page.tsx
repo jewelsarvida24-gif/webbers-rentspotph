@@ -4,11 +4,13 @@ import { ArrowLeft } from 'lucide-react';
 import Navbar from '@/components/layout/navbar';
 import BookingRequestForm from '@/components/booking/BookingRequestForm';
 import { createClient } from '@/lib/supabase_server';
+import { demoUnits } from '@/lib/demoUnits';
 
 export default async function BookingPage({ params }: { params: Promise<{ unitId: string }> }) {
   const { unitId } = await params;
   const supabase = await createClient();
-  const { data: unit } = await supabase.from('tbl_units').select('*').eq('unit_id', unitId).eq('status', 'available').maybeSingle();
+  const { data: databaseUnit } = await supabase.from('tbl_units').select('*').eq('unit_id', unitId).eq('status', 'available').maybeSingle();
+  const unit = databaseUnit || demoUnits.find((demoUnit) => demoUnit.unit_id === unitId);
   if (!unit) notFound();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect(`/auth/login?redirectTo=/guest/browse/${unitId}`);

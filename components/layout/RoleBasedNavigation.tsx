@@ -55,23 +55,23 @@ export default function RoleBasedNavigation() {
     const roleLinks: Record<string, any[]> = {
       'customer': [
         { label: 'Dashboard', href: '/renter/dashboard' },
-        { label: 'My Rentals', href: '/renter/my-rentals', icon: '📦' },
-        { label: 'KYC Verification', href: '/renter/kyc', icon: '🆔' },
-        { label: 'Profile', href: '/renter/profile', icon: '👤' },
+        { label: 'My Rentals', href: '/renter/my-rentals' },
+        { label: 'KYC Verification', href: '/renter/kyc' },
+        { label: 'Profile', href: '/renter/profile' },
       ],
       'admin': [
-        { label: 'Dashboard', href: '/admin/dashboard', icon: '📊' },
-        { label: 'Bookings', href: '/admin/booking', icon: '📅' },
-        { label: 'Inventory', href: '/admin/inventory', icon: '📦' },
-        { label: 'KYC Review', href: '/admin/kyc', icon: '✅' },
-        { label: 'Users', href: '/admin/users', icon: '👥' },
+        { label: 'Dashboard', href: '/admin/dashboard' },
+        { label: 'Bookings', href: '/admin/booking' },
+        { label: 'Inventory', href: '/admin/inventory' },
+        { label: 'KYC Review', href: '/admin/kyc' },
+        { label: 'Users', href: '/admin/users' },
       ],
       'sysadmin': [
-        { label: 'Dashboard', href: '/sysadmin', icon: '⚙️' },
-        { label: 'Manage Admins', href: '/sysadmin/manage-admins', icon: '👥' },
-        { label: 'User Accounts', href: '/sysadmin/users', icon: '🔐' },
-        { label: 'System Reports', href: '/sysadmin/reports', icon: '📊' },
-        { label: 'Settings', href: '/sysadmin/settings', icon: '⚙️' },
+        { label: 'Dashboard', href: '/sysadmin' },
+        { label: 'Manage Admins', href: '/sysadmin/manage-admins' },
+        { label: 'User Accounts', href: '/sysadmin/users' },
+        { label: 'System Reports', href: '/sysadmin/reports' },
+        { label: 'Settings', href: '/sysadmin/settings' },
       ],
     };
 
