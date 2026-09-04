@@ -134,7 +134,7 @@ export default function LoginPage() {
       const { data: profile, error: profileError } = await supabase
         .from("tbl_users")
         .select("role")
-        .eq("id", user.id)
+        .eq("user_id", user.id)
         .single();
 
       if (profileError) {
