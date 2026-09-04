@@ -1,98 +1,231 @@
-// app/auth/actions.ts
+// app/auth/action.ts
 'use server';
 
-import { Resend } from 'resend';
-import { createClient } from '@/lib/supabase_server';
 import { createAdminClient } from '@/lib/supabase_admin';
-import { sendEmailVerification } from '@/lib/email';
-import crypto from 'crypto';
+import {
+  sendEmailVerification,
+  sendPasswordResetEmail,
+} from '@/lib/email';
+  
+const APP_URL =
+  process.env.NEXT_PUBLIC_APP_URL?.trim() ||
+  'http://localhost:3000';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-const FROM = process.env.EMAIL_FROM ?? 'RentSpot.ph <noreply@rentspotph.com>';
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
+
+/* =========================================================
+   REGISTER CUSTOMER
+========================================================= */
+
+const PASSWORD_REQUIREMENTS_MSG =
+  'Password must be at least 8 characters and include an uppercase letter, a lowercase letter, a number, and a special character.';
+
+function isPasswordStrong(password: string) {
+  return (
+    password.length >= 8 &&
+    /[A-Z]/.test(password) &&
+    /[a-z]/.test(password) &&
+    /[0-9]/.test(password) &&
+    /[^A-Za-z0-9]/.test(password)
+  );
+}
 
 export async function registerUser({
-  fullName,
+  firstName,
+  lastName,
   email,
+  mobileNumber,
   password,
+  confirmPassword,
 }: {
-  fullName: string;
+  firstName: string;
+  lastName: string;
   email: string;
+  mobileNumber: string;
   password: string;
+  confirmPassword: string;
 }) {
   try {
     const adminSupabase = createAdminClient();
 
-    const nameParts = fullName.trim().split(/\s+/);
-    const first_name = nameParts[0] || '';
-    const last_name = nameParts.slice(1).join(' ') || '';
+    const normalizedEmail = email.trim().toLowerCase();
+    const first_name = firstName.trim();
+    const last_name = lastName.trim();
+    const mobile_number = mobileNumber.trim();
 
-    const { data, error } = await adminSupabase.auth.admin.generateLink({
-      type: 'signup',
-      email,
-      password,
-      options: {
-        redirectTo: `${APP_URL}/auth/login`,
-        data: {
-          first_name,
-          last_name,
-          phone_number: '',
+    if (!normalizedEmail || !first_name || !last_name) {
+      return { error: 'Please provide your first name, last name, and a valid email.' };
+    }
+
+    if (!/^(09|\+639)\d{9}$/.test(mobile_number)) {
+      return { error: 'Please provide a valid PH mobile number (e.g. 09XXXXXXXXX).' };
+    }
+    if (!isPasswordStrong(password)) {
+      return { error: PASSWORD_REQUIREMENTS_MSG };
+    }
+
+    if (password !== confirmPassword) {
+      return { error: 'Password and confirm password do not match.' };
+    }
+
+    console.log(
+      '[REGISTER CUSTOMER] Creating account:',
+      normalizedEmail
+    );
+
+    const { data, error } =
+      await adminSupabase.auth.admin.generateLink({
+        type: 'signup',
+        email: normalizedEmail,
+        password,
+        options: {
+          redirectTo: `${APP_URL}/auth/login`,
+          data: {
+            first_name,
+            last_name,
+            phone_number: mobile_number,
+            role: 'customer',
+          },
         },
-      },
-    });
+      });
 
     if (error || !data) {
-      console.error('Signup generateLink error:', error);
+      console.error(
+        '[REGISTER CUSTOMER] Supabase error:',
+        error
+      );
+
       return {
-        error: error?.message ?? 'Failed to create account',
+        error:
+          error?.message ||
+          'Failed to create account.',
       };
     }
 
     if (data.user) {
-      const { error: upsertError } = await adminSupabase
-        .from('tbl_users')
-        .upsert({
-          user_id: data.user.id,
-          first_name,
-          last_name,
-          email,
-          phone_number: '',
-          role: 'customer',
-        });
+      const { error: upsertError } =
+        await adminSupabase
+          .from('tbl_users')
+          .upsert(
+            {
+              user_id: data.user.id,
+              first_name,
+              last_name,
+              email: normalizedEmail,
+              phone_number: mobile_number,
+              role: 'customer',
+            },
+            {
+              onConflict: 'user_id',
+            }
+          );
 
       if (upsertError) {
-        console.error('User profile upsert error:', upsertError);
+        console.error(
+          '[REGISTER CUSTOMER] tbl_users error:',
+          upsertError
+        );
+
+        return {
+          error:
+            `Auth account created, but the user profile could not be saved: ${upsertError.message}`,
+        };
       }
     }
 
-    const verificationUrl = data.properties.action_link;
+    const verificationUrl =
+      data.properties.action_link;
 
-    const emailResult = await sendEmailVerification(
-      email,
-      first_name || 'there',
-      verificationUrl
+    console.log(
+      '[REGISTER CUSTOMER] Sending verification email...'
     );
+
+    const emailResult =
+      await sendEmailVerification(
+        normalizedEmail,
+        first_name || 'there',
+        verificationUrl
+      );
 
     if (emailResult.error) {
       console.error(
-        'Resend verification error:',
+        '[REGISTER CUSTOMER] Resend error:',
         emailResult.error
       );
 
       return {
-        error: 'Failed to send verification email',
+        error:
+          emailResult.error.message ||
+          'Failed to send verification email.',
+      };
+    }
+
+    console.log(
+      '[REGISTER CUSTOMER] Verification email sent.'
+    );
+
+    return {
+      success: true,
+    };
+  } catch (error: any) {
+    console.error(
+      '[REGISTER CUSTOMER] Unexpected error:',
+      error
+    );
+
+    return {
+      error:
+        error?.message ||
+        'An error occurred.',
+    };
+  }
+}
+
+export async function requestPasswordReset(email: string) {
+  try {
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (!normalizedEmail) {
+      return { error: 'Email is required.' };
+    }
+
+    const adminSupabase = createAdminClient();
+    const { data, error } =
+      await adminSupabase.auth.admin.generateLink({
+        type: 'recovery',
+        email: normalizedEmail,
+        options: {
+          redirectTo: `${APP_URL}/auth/update-password`,
+        },
+      });
+
+    if (error || !data?.properties.action_link) {
+      return {
+        error: error?.message || 'Unable to create a password reset link.',
+      };
+    }
+
+    const emailResult = await sendPasswordResetEmail(
+      normalizedEmail,
+      data.properties.action_link
+    );
+
+    if (emailResult.error) {
+      return {
+        error: emailResult.error.message || 'Failed to send password reset email.',
       };
     }
 
     return { success: true };
   } catch (error: any) {
-    console.error('Registration error:', error);
-
-    return {
-      error: error.message || 'An error occurred',
-    };
+    console.error('[PASSWORD RESET] Unexpected error:', error);
+    return { error: error?.message || 'Unable to send password reset email.' };
   }
 }
+
+
+/* =========================================================
+   REGISTER ADMIN
+========================================================= */
 
 export async function registerAdminUser({
   first_name,
@@ -112,250 +245,167 @@ export async function registerAdminUser({
   try {
     const adminSupabase = createAdminClient();
 
-    if (!invitation_code) {
-      return { error: 'Invitation code is required' };
+    const normalizedEmail =
+      email.trim().toLowerCase();
+
+    if (!invitation_code?.trim()) {
+      return {
+        error: 'Invitation code is required.',
+      };
     }
 
-    const { data: invitation, error: invitationError } = await adminSupabase
+    const {
+      data: invitation,
+      error: invitationError,
+    } = await adminSupabase
       .from('tbl_admin_invitations')
       .select('*')
-      .eq('code', invitation_code)
+      .eq('code', invitation_code.trim())
       .eq('status', 'pending')
       .single();
 
     if (invitationError || !invitation) {
-      return { error: 'Invalid or expired invitation code' };
+      console.error(
+        '[REGISTER ADMIN] Invitation error:',
+        invitationError
+      );
+
+      return {
+        error:
+          'Invalid or expired invitation code.',
+      };
     }
 
-    const { data, error } = await adminSupabase.auth.admin.generateLink({
-      type: 'signup',
-      email,
-      password,
-      options: {
-        redirectTo: `${APP_URL}/admin/auth/login`,
-        data: {
-          first_name,
-          last_name,
-          phone_number,
-          role: 'admin',
+    const { data, error } =
+      await adminSupabase.auth.admin.generateLink({
+        type: 'signup',
+        email: normalizedEmail,
+        password,
+        options: {
+          redirectTo:
+            `${APP_URL}/admin/auth/login`,
+          data: {
+            first_name,
+            last_name,
+            phone_number,
+            role: 'admin',
+          },
         },
-      },
-    });
+      });
 
     if (error || !data) {
-      console.error('Admin signup generateLink error:', error);
-      return { error: error?.message ?? 'Failed to create admin account' };
+      console.error(
+        '[REGISTER ADMIN] Supabase error:',
+        error
+      );
+
+      return {
+        error:
+          error?.message ||
+          'Failed to create admin account.',
+      };
     }
 
     if (data.user) {
-      const { error: upsertError } = await adminSupabase.from('tbl_users').upsert({
-        user_id: data.user.id,
-        first_name,
-        last_name,
-        email,
-        phone_number,
-        role: 'admin',
-      });
+      const { error: upsertError } =
+        await adminSupabase
+          .from('tbl_users')
+          .upsert(
+            {
+              user_id: data.user.id,
+              first_name,
+              last_name,
+              email: normalizedEmail,
+              phone_number,
+              role: 'admin',
+            },
+            {
+              onConflict: 'user_id',
+            }
+          );
 
       if (upsertError) {
-        console.error('Admin profile upsert error:', upsertError);
+        console.error(
+          '[REGISTER ADMIN] tbl_users error:',
+          upsertError
+        );
       }
 
-      await adminSupabase
-        .from('tbl_admin_invitations')
-        .update({ status: 'used', used_by: data.user.id, used_at: new Date().toISOString() })
-        .eq('id', invitation.id);
+      const { error: invitationUpdateError } =
+        await adminSupabase
+          .from('tbl_admin_invitations')
+          .update({
+            status: 'used',
+            used_by: data.user.id,
+            used_at:
+              new Date().toISOString(),
+          })
+          .eq('id', invitation.id);
+
+      if (invitationUpdateError) {
+        console.error(
+          '[REGISTER ADMIN] Invitation update error:',
+          invitationUpdateError
+        );
+      }
     }
 
-    const verificationUrl = data.properties.action_link;
-    const emailResult = await sendEmailVerification(email, first_name || 'there', verificationUrl);
+    const verificationUrl =
+      data.properties.action_link;
+
+    const emailResult =
+      await sendEmailVerification(
+        normalizedEmail,
+        first_name || 'there',
+        verificationUrl
+      );
 
     if (emailResult.error) {
-      console.error('Resend admin verification error:', emailResult.error);
-      return { error: 'Failed to send verification email' };
+      console.error(
+        '[REGISTER ADMIN] Resend error:',
+        emailResult.error
+      );
+
+      return {
+        error:
+          emailResult.error.message ||
+          'Failed to send verification email.',
+      };
     }
 
-    return { success: true };
+    return {
+      success: true,
+    };
   } catch (error: any) {
-    console.error('Admin registration error:', error);
-    return { error: error.message || 'An error occurred' };
+    console.error(
+      '[REGISTER ADMIN] Unexpected error:',
+      error
+    );
+
+    return {
+      error:
+        error?.message ||
+        'An error occurred.',
+    };
   }
 }
 
-export async function sendPasswordResetEmail(email: string) {
-  try {
-    // Get Supabase client
-    const supabase = await createClient();
-
-    // Check if user exists
-    const { data: user, error: userError } = await supabase
-      .from('tbl_users')
-      .select('user_id, first_name')
-      .eq('email', email)
-      .single();
-
-    if (userError || !user) {
-      // Don't reveal if email exists (security best practice)
-      return { success: true, message: 'If email exists, reset link will be sent' };
-    }
-
-    // Generate reset token (32 bytes = 64 hex characters)
-    const token = crypto.randomBytes(32).toString('hex');
-    const expiresAt = new Date();
-    expiresAt.setHours(expiresAt.getHours() + 24); // Expires in 24 hours
-
-    // Store token in database
-    const { error: tokenError } = await supabase
-      .from('tbl_password_reset_tokens')
-      .insert({
-        user_id: user.user_id,
-        email: email,
-        token: token,
-        expires_at: expiresAt.toISOString(),
-      });
-
-    if (tokenError) {
-      console.error('Token storage error:', tokenError);
-      return { error: 'Failed to create reset link' };
-    }
-
-    // Create reset link
-    const resetLink = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/auth/reset-password?token=${token}`;
-
-    // Send email via Resend
-    const result = await resend.emails.send({
-      from: FROM,
-      to: email,
-      subject: 'Reset Your RentSpot.ph Password',
-      html: `
-        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #f9fafb; padding: 20px;">
-          <div style="background: white; border-radius: 8px; padding: 40px; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-            <h2 style="color: #1f2937; margin-top: 0;">Password Reset Request</h2>
-            
-            <p style="color: #4b5563; line-height: 1.6;">Hello ${user.first_name || 'there'},</p>
-            
-            <p style="color: #4b5563; line-height: 1.6;">We received a request to reset your password for RentSpot.ph. Click the button below to create a new password:</p>
-            
-            <div style="margin: 30px 0; text-align: center;">
-              <a href="${resetLink}" style="background-color: #5B21B6; color: white; padding: 12px 40px; border-radius: 6px; text-decoration: none; display: inline-block; font-weight: 600;">
-                Reset Password
-              </a>
-            </div>
-            
-            <p style="color: #6b7280; font-size: 14px; line-height: 1.6;">Or copy and paste this link in your browser:</p>
-            <p style="background: #f3f4f6; padding: 12px; border-radius: 6px; word-break: break-all; color: #1f2937; font-size: 12px;">${resetLink}</p>
-            
-            <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
-            
-            <p style="color: #9ca3af; font-size: 12px; margin: 0;">
-              This link expires in 24 hours. If you didn't request a password reset, please ignore this email or contact support if you have concerns.
-            </p>
-            
-            <p style="color: #9ca3af; font-size: 12px; margin-top: 10px;">
-              Best regards,<br>RentSpot.ph Team
-            </p>
-          </div>
-        </div>
-      `,
-    });
-
-    if (result.error) {
-      console.error('Resend error:', result.error);
-      return { error: 'Failed to send email' };
-    }
-
-    return { success: true, message: 'Password reset link sent to your email' };
-  } catch (error: any) {
-    console.error('Password reset error:', error);
-    return { error: error.message || 'An error occurred' };
-  }
-}
-
-export async function verifyPasswordResetToken(token: string) {
-  try {
-    const supabase = await createClient();
-
-    // Get token from database
-    const { data: resetToken, error } = await supabase
-      .from('tbl_password_reset_tokens')
-      .select('*')
-      .eq('token', token)
-      .single();
-
-    if (error || !resetToken) {
-      return { error: 'Invalid reset link' };
-    }
-
-    // Check if expired
-    if (new Date(resetToken.expires_at) < new Date()) {
-      return { error: 'Reset link has expired' };
-    }
-
-    // Check if already used
-    if (resetToken.used) {
-      return { error: 'Reset link has already been used' };
-    }
-
-    return { success: true, email: resetToken.email, token_id: resetToken.id };
-  } catch (error: any) {
-    return { error: error.message };
-  }
-}
-
-export async function resetPasswordWithToken(token: string, newPassword: string) {
-  try {
-    const supabase = await createClient();
-    const adminSupabase = createAdminClient();
-
-    // Verify token
-    const { data: resetToken, error: tokenError } = await supabase
-      .from('tbl_password_reset_tokens')
-      .select('*')
-      .eq('token', token)
-      .single();
-
-    if (tokenError || !resetToken) {
-      return { error: 'Invalid reset link' };
-    }
-
-    // Check if expired
-    if (new Date(resetToken.expires_at) < new Date()) {
-      return { error: 'Reset link has expired' };
-    }
-
-    // Check if already used
-    if (resetToken.used) {
-      return { error: 'Reset link has already been used' };
-    }
-
-    // Get user
-    const { data: user } = await supabase
-      .from('tbl_users')
-      .select('user_id')
-      .eq('user_id', resetToken.user_id)
-      .single();
-
-    if (!user) {
-      return { error: 'User not found' };
-    }
-
-    // Update password in Supabase Auth
-    const { error: authError } = await adminSupabase.auth.admin.updateUserById(user.user_id, {
-      password: newPassword,
-    });
-
-    if (authError) {
-      return { error: authError.message };
-    }
-
-    // Mark token as used
-    await supabase
-      .from('tbl_password_reset_tokens')
-      .update({ used: true })
-      .eq('id', resetToken.id);
-
-    return { success: true };
-  } catch (error: any) {
-    return { error: error.message };
-  }
-}
+/*
+ * =========================================================
+ * PASSWORD RESET
+ * =========================================================
+ * Password reset is now handled entirely by Supabase Auth's
+ * built-in flow:
+ *
+ *   - Request:  supabase.auth.resetPasswordForEmail()
+ *               (called from app/auth/forgot-password/page.tsx)
+ *   - Complete: supabase.auth.updateUser({ password })
+ *               (called from app/auth/update-password/page.tsx)
+ *
+ * The previous custom implementation (Resend + a
+ * tbl_password_reset_tokens table) has been removed in favor
+ * of this simpler, built-in flow. If you still have a
+ * tbl_password_reset_tokens table in the database, it's safe
+ * to drop it once you've confirmed the new flow works end to
+ * end.
+ */
