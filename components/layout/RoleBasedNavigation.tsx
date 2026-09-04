@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase_client';
 import { Menu, X, LogOut, User, Settings, Shield } from 'lucide-react';
+import LogoutConfirmation from '@/components/auth/LogoutConfirmation';
 
 type AppUser = {
   first_name?: string | null;
@@ -18,6 +19,7 @@ export default function RoleBasedNavigation() {
   const [user, setUser] = useState<AppUser | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [logoutOpen, setLogoutOpen] = useState(false);
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -37,6 +39,7 @@ export default function RoleBasedNavigation() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+    setLogoutOpen(false);
     router.push('/');
     router.refresh();
   };
@@ -114,8 +117,8 @@ export default function RoleBasedNavigation() {
                 </p>
               </div>
               <button
-                onClick={handleLogout}
-                className="p-2 hover:bg-red-50 rounded-lg transition text-red-600"
+                onClick={() => setLogoutOpen(true)}
+                className="p-2 rounded-lg text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
                 title="Logout"
               >
                 <LogOut className="w-4 h-4" />
@@ -166,10 +169,10 @@ export default function RoleBasedNavigation() {
           {user && (
             <button
               onClick={() => {
-                handleLogout();
+                setLogoutOpen(true);
                 setMenuOpen(false);
               }}
-              className="w-full mt-4 px-4 py-2 bg-red-50 text-red-600 font-medium rounded-lg hover:bg-red-100 transition flex items-center justify-center gap-2"
+              className="w-full mt-4 px-4 py-2 bg-slate-100 text-slate-700 font-medium rounded-lg hover:bg-slate-200 transition flex items-center justify-center gap-2"
             >
               <LogOut className="w-4 h-4" />
               Logout
@@ -193,6 +196,7 @@ export default function RoleBasedNavigation() {
           )}
         </div>
       )}
+      <LogoutConfirmation open={logoutOpen} onCancel={() => setLogoutOpen(false)} onConfirm={handleLogout} />
     </nav>
   );
 }
