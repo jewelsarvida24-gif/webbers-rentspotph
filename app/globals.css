@@ -50,8 +50,8 @@
      ========================================= */
 
   .btn-primary {
-    @apply bg-brand-500 hover:bg-brand-600 text-white font-semibold px-5 py-2.5 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md;
-  }
+  @apply bg-brand-500 hover:bg-brand-600 text-white font-semibold px-5 py-2.5 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md;
+}
 
   .btn-secondary {
     @apply bg-white border border-neutral-200 hover:bg-brand-50 text-neutral-700 font-semibold px-5 py-2.5 rounded-lg transition-all duration-200;
