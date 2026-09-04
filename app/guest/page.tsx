@@ -8,10 +8,11 @@ import Footer from '@/components/layout/footer';
 import type { RentalUnit } from '@/lib/types';
 
 interface Props {
-  searchParams: { category?: string; search?: string };
+  searchParams: Promise<{ category?: string; search?: string }>;
 }
 
 export default async function BrowsePage({ searchParams }: Props) {
+  const filters = await searchParams;
   const supabase = await createClient();
   let query = supabase
     .from('tbl_units')
@@ -19,11 +20,11 @@ export default async function BrowsePage({ searchParams }: Props) {
     .eq('status', 'available')
     .order('created_at', { ascending: false });
 
-  if (searchParams.category) {
-    query = query.eq('category', searchParams.category);
+  if (filters.category) {
+    query = query.eq('category', filters.category);
   }
-  if (searchParams.search) {
-    query = query.ilike('unit_name', `%${searchParams.search}%`);
+  if (filters.search) {
+    query = query.ilike('unit_name', `%${filters.search}%`);
   }
 
   const { data: units } = await query;
@@ -44,7 +45,7 @@ export default async function BrowsePage({ searchParams }: Props) {
         <div className="flex flex-col md:flex-row gap-6">
           <aside className="w-full md:w-56 shrink-0">
             <Suspense fallback={<div className="card p-4">Loading filters...</div>}>
-              <BrowseFilters currentCategory={searchParams.category} />
+              <BrowseFilters currentCategory={filters.category} currentSearch={filters.search} />
             </Suspense>
           </aside>
           <section className="flex-1">

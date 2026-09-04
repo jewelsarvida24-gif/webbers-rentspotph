@@ -143,7 +143,7 @@ export default function LoginPage() {
       } else if (profile?.role === 'admin') {
         router.push('/admin/dashboard');
       } else {
-        router.push('/renter/my-rentals');
+        router.push('/renter/dashboard');
       }
 
       router.refresh();

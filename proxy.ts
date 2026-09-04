@@ -59,13 +59,13 @@ export async function proxy(request: NextRequest) {
 
     if (secureSysadminPath && !pathname.startsWith('/sysadmin/auth/login')) {
       if (role !== 'sysadmin') {
-        return NextResponse.redirect(new URL(role === 'admin' ? '/admin/dashboard' : '/renter/my-rentals', request.url));
+        return NextResponse.redirect(new URL(role === 'admin' ? '/admin/dashboard' : '/renter/dashboard', request.url));
       }
     }
 
     if (secureAdminPath && !pathname.startsWith('/admin/auth/login')) {
       if (role !== 'admin' && role !== 'sysadmin') {
-        return NextResponse.redirect(new URL('/renter/my-rentals', request.url));
+        return NextResponse.redirect(new URL('/renter/dashboard', request.url));
       }
     }
 
@@ -83,7 +83,7 @@ export async function proxy(request: NextRequest) {
         return NextResponse.redirect(new URL('/admin/dashboard', request.url));
       }
       if (role === 'customer') {
-        return NextResponse.redirect(new URL('/renter/my-rentals', request.url));
+        return NextResponse.redirect(new URL('/renter/dashboard', request.url));
       }
     }
   }

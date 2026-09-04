@@ -54,6 +54,7 @@ export default function RoleBasedNavigation() {
 
     const roleLinks: Record<string, any[]> = {
       'customer': [
+        { label: 'Dashboard', href: '/renter/dashboard' },
         { label: 'My Rentals', href: '/renter/my-rentals', icon: '📦' },
         { label: 'KYC Verification', href: '/renter/kyc', icon: '🆔' },
         { label: 'Profile', href: '/renter/profile', icon: '👤' },

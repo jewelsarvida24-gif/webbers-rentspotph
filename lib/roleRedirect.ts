@@ -10,7 +10,7 @@ export const getRoleRedirectPath = (role: string | null | undefined): string => 
     case 'admin':
       return '/admin/dashboard';
     case 'customer':
-      return '/renter/my-rentals';
+      return '/renter/dashboard';
     default:
       return '/guest/browse';
   }
